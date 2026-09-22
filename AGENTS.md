@@ -14,9 +14,10 @@ anywhere visible). This file covers what this repo's own code does.
 Status: v0. Covers `videri-probe` (CORE-10294) and the core client library —
 auth, request wrapper, RPM (workspaces), Canvas Service, Canvas Status, CMS
 and Publisher adapters, config (CORE-10267). Does not yet cover wall/layout
-resolution, delivery evidence, canvas settings (Part 1 step 4's documented
-endpoint doesn't work — no replacement found), or the menu-board recipe
-(CORE-10268, lives in `videri-recipes`).
+resolution, delivery evidence, canvas settings (Part 1 step 4 — the real
+endpoint exists on Messaging Websocket Service but 500s live on this
+deployment, a platform bug), or the menu-board recipe (CORE-10268, lives
+in `videri-recipes`).
 
 ## Part 1: `videri-probe`
 
@@ -143,15 +144,36 @@ Content-Type: application/json
 
 - Print the full response, with the `available_timezones` field removed
   (it is large and not useful for this discovery pass).
-- **Verified live against sandbox: this 404s, on both online and offline
-  canvases.** `sync_command` does not appear anywhere in the live
-  `canvas-service` OpenAPI spec. The closest match,
-  `GET/POST /canvas/v1/players/settings/{deviceId}`, is explicitly
-  documented as device-facing — it requires device authentication, not an
-  operator `id_token`, and returns 401/403 for a normal API caller. No
-  working operator-facing replacement has been found as of this writing.
-  Treat this step as broken on this deployment rather than debugging your
-  own request — the failure is the documented endpoint, not your call.
+- **This exact call 404s, verified live against sandbox on both online and
+  offline canvases.** `sync_command` does not appear anywhere in the live
+  `canvas-service` OpenAPI spec — it was never real on this service.
+  `GET/POST /canvas/v1/players/settings/{deviceId}` looks like a match by
+  name but its own spec description says it's device-facing, requiring
+  device authentication rather than an operator `id_token` — it returns
+  401/403 for a normal API caller.
+- **The real `sync_command` lives on a different service**: Messaging
+  Websocket Service, server prefix `/messaging-websocket`, path
+  `/messaging/sync_command` — confirmed present in that service's live
+  spec, with `ops_get_settings` explicitly listed as a supported
+  `command_name`. The request body is flat, not `{command: "..."}`:
+  `{message_id, command_name, command_params, device_id}` (`device_jid`
+  and `player_id` also accepted in place of `device_id`).
+- **But that correct call fails too — verified live, reproducibly:
+  `500 Internal Server Error`**, on multiple devices, including a
+  confirmed-*online* one (ruling out "device unreachable" as the cause),
+  and with a second, trivial command (`get_presence`) that also 500s the
+  same way. The spec itself documents a `DEVICE_OFFLINE` response code for
+  exactly the "can't reach the device" case, implying the endpoint is
+  meant to fail gracefully with a `200` and that code rather than crash —
+  this looks like a genuine server-side bug in Messaging Websocket
+  Service's command-delivery path on this deployment, not a client-side
+  mistake (validation and auth both behave correctly on malformed input:
+  a bad `command_name` gets a clean `400`, a missing device identifier
+  gets a clean `403`).
+- Treat this step as broken on this deployment rather than debugging your
+  own request. Worth reporting to platform engineering as a bug (the
+  exact 500, the unused `DEVICE_OFFLINE` code, and confirmation an online
+  device still fails) rather than treating it as a documentation gap.
 
 ### 5. Optional write: flip brightness (`--write` flag)
 
@@ -164,15 +186,26 @@ Content-Type: application/json
 { "command": "demo_command set_brightness:={0-255}" }
 ```
 
-- Brightness is **0-255 on the device**, not a 0-100 percentage. Convert at
-  the edge if a UI shows a percentage: `round(pct / 100 * 255)`.
+- **This also 404s, verified live against sandbox** — same wrong service
+  as step 4 (`sync_command` isn't on Canvas Service at all). Routing this
+  through the corrected Messaging Websocket Service path
+  (`POST /messaging-websocket/messaging/sync_command`,
+  `command_name: "demo_command"`, `command_params: {action:
+  "set_brightness:=200"}`) was tried live and hit the same `500` as step
+  4's `ops_get_settings` — the command-delivery bug affects `demo_command`
+  too, not just `ops_*` commands.
+- Brightness is **0-255 on the device**, not a 0-100 percentage, per the
+  demo command's own documented convention — kept here for whenever
+  delivery is working again. Convert at the edge if a UI shows a
+  percentage: `round(pct / 100 * 255)`.
 - Refuse to run this step unless `VIDERI_TENANT` (case-insensitive) is
   `VIDERI` or `VIDERISALES` — the two internal builder tenants
   (`videri-context/AUTH.md`, "Getting access"). This is a safety rail: this
   script must never flip a customer's device.
 - After sending the command, call step 4 again and print
   `brightness before=<X> after=<Y>` so the effect is visible, not assumed
-  from a 200 response.
+  from a 200 response. In practice this step currently can't complete at
+  all on this deployment — see step 4's note.
 
 ### 6. Canvas Status and Metrics
 
@@ -449,10 +482,12 @@ Not implemented, out of scope for CORE-10267/this revision: wall/layout
 resolution (only needed for multi-screen recipes), delivery-evidence and
 proof-of-play polling, a persistent or distributed token cache (the
 in-memory cache is sufficient for a script or short-lived process; a
-long-running server's caching strategy is that app's own concern), and a
-working operator-facing replacement for canvas settings (Part 1 step 4 —
-the documented endpoint 404s and no alternative has been found). The
-menu-board recipe (CORE-10268, `videri-recipes`) is expected to need at
-least wall/layout resolution and delivery evidence — build those there,
-informed by what the recipe actually needs, rather than speculatively
+long-running server's caching strategy is that app's own concern), and
+canvas settings (Part 1 step 4 — the real endpoint was found, on
+Messaging Websocket Service, but it 500s live on this deployment
+regardless of device status; a platform bug, not a missing client
+feature). The menu-board recipe (CORE-10268, `videri-recipes`) is
+expected to need at least wall/layout resolution and delivery evidence —
+build those there, informed by what the recipe actually needs, rather
+than speculatively
 here.
