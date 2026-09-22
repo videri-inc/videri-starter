@@ -3,65 +3,75 @@
 The canonical starter kit for building on the Videri REST API. Every new build
 starts here instead of from an empty folder.
 
-**Status: internal preview.** `probe/videri-probe.mjs` (CORE-10294) is the
-first thing to land — a one-file, dependency-free discovery script, meant to
-run before any framework code. The rest of the kit (auth module, API client,
-config, one live render) is CORE-10267, not yet started.
+**Status: internal preview.** `probe/videri-probe.mjs` (CORE-10294) and the
+core client library in `lib/` (CORE-10267) are both here — auth, a typed
+request wrapper, Canvas Service/CMS/Publisher adapters, config, and one
+live render example. The menu-board recipe built on top of this lives in
+[videri-recipes](https://github.com/videri-inc/videri-recipes), not here.
 
-## Run the probe
-
-The probe authenticates, lists your tenants and workspaces, lists canvases,
-and dumps one device's settings. It settles more in ten minutes than reading
-documentation does — run it first, before anything else in this repo.
+## Get set up
 
 ```sh
 cp .env.example .env   # fill in your credentials, see AUTH.md in videri-context
+```
+
+`VIDERI_API_BASE_URL` selects the environment (defaults to production) —
+change it to whichever one your key, token and tenant belong to.
+
+## Run the probe
+
+Run this first, before writing any application code. The probe
+authenticates, lists your tenants and workspaces, lists canvases, and dumps
+one device's settings — it settles more in ten minutes than reading
+documentation does.
+
+```sh
 node --env-file=.env probe/videri-probe.mjs <canvasId>
 ```
 
 Add `--write` to also flip that canvas's brightness and confirm the change
 took effect. Refused unless your tenant is Videri or Videri Sales.
 
-**Not using Node?** The probe ships in Node because that's what the
-reference builds in this ecosystem use, but the protocol it implements is
-language-neutral. Read [AGENTS.md](AGENTS.md) for the full spec — request
-shapes, headers, decode steps, expected output — and ask your coding agent
-to port it to whatever language you're already using. `AGENTS.md` is the
-contract; `probe/videri-probe.mjs` is a working example to verify a port
-against (run both against the same sandbox tenant and diff the output).
+## Build something
 
-## What the kit will contain
+The core client library is in `lib/` — plain JavaScript, zero npm
+dependencies, JSDoc types. Every adapter goes through `lib/client.mjs`'s
+shared request function, so writing new application code means calling an
+existing adapter or adding a new one in `lib/services/`, never a raw
+`fetch` call with hand-built headers.
 
-- **Auth**: API key + username + password to token (`POST
-  /rpm-service/v2/auth/token`), token caching, refresh before the one-hour
-  expiry, refresh token kept server-side.
-- **API client**: base URL from config; `Authorization`, `x-tenant` and
-  optional `x-group` on every call; one pagination adapter per service behind a
-  common interface (Canvas Service `content` / `totalElements`, CMS `data` /
-  `meta.totalItems`, V2 assets page + limit); tolerant field access for
-  snake_case and camelCase.
-- **Config**: environment variables only (`VIDERI_API_BASE_URL`,
-  `VIDERI_TENANT`, optional `VIDERI_GROUP`, credentials), an `.env.example`,
-  no secrets committed.
-- **Errors and logging**: status code surfaced with a short body; one place
-  handles `401` (refresh) and `403` (tenant or permission).
-- **One live render**: a canvas list with online / offline status, the same
-  call the developer portal's authentication article uses.
-- **README**: how to run in under ten minutes, the agent prompt from the
-  portal's Start here page, and what to change first.
+```sh
+node --env-file=.env examples/list-canvases.mjs
+```
 
-## How to use it (once it exists)
+That's the "one live render" — authenticate, list every canvas, print
+online/offline status. It's also the shortest path to confirming the whole
+chain works before building anything bigger. From there:
 
-1. Get access and an API key: see `AUTH.md` in
-   https://github.com/videri-inc/videri-context.
-2. Clone, copy `.env.example` to `.env`, fill it in, run one command.
-3. Point your coding agent at
-   `https://developer.sandbox.videri.com/llms.txt` and this repository.
+```js
+import { loadConfig } from './lib/config.mjs'
+import { listCanvases } from './lib/services/canvas.mjs'
+import { createAsset, createPlaylist, updatePlaylistAssets } from './lib/services/cms.mjs'
+import { createEvents } from './lib/services/publisher.mjs'
+
+const config = loadConfig()
+```
+
+See [AGENTS.md](AGENTS.md) "Part 2: core client library" for every
+adapter's exact request/response contract.
+
+**Not using Node?** Everything here ships in Node because that's what the
+reference builds in this ecosystem use, but the protocol is language-neutral.
+Read [AGENTS.md](AGENTS.md) for the full spec — request shapes, headers,
+decode steps, expected output — and ask your coding agent to port it to
+whatever language you're already using. `AGENTS.md` is the contract; the
+`.mjs` files are working examples to verify a port against (run both
+against the same tenant and environment and diff the output).
 
 ## Rules
 
-- Every API call goes through the client. No ad-hoc requests with hand-built
-  headers.
+- Every API call goes through `lib/client.mjs`'s `request()`. No ad-hoc
+  `fetch` calls with hand-built headers.
 - No customer names, tenant codes, device serials or asset URLs in the repo.
 - Read `AGENTS.md` in `videri-context` before building on top of this.
 
@@ -69,4 +79,3 @@ against (run both against the same sandbox tenant and diff the output).
 
 - Context pack: https://github.com/videri-inc/videri-context
 - Recipes: https://github.com/videri-inc/videri-recipes
-- Developer portal (sandbox): https://developer.sandbox.videri.com/start
