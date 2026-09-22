@@ -6,9 +6,9 @@
  * write command.
  *
  * Run before any framework code. It compresses the discovery every new
- * builder repeats by hand into a ten-minute, end-to-end check, and it
- * settles the id_token vs access_token question for Canvas Status and
- * Metrics live rather than by reading conflicting notes.
+ * builder repeats by hand into a ten-minute, end-to-end check, including a
+ * live call to Canvas Status and Metrics (their own service, own body
+ * shape per endpoint - see AGENTS.md Part 1 step 6).
  *
  * This file is the Node reference implementation of the protocol documented
  * in ../AGENTS.md. If you are working in another language, point your coding
@@ -150,27 +150,29 @@ async function sendBrightnessCommand(baseUrl, tenant, idToken, canvasId, brightn
 }
 
 /**
- * Canvas Status and Metrics are the one documented exception to "id_token
- * everywhere": one build reports they need access_token instead. Probe both
- * token types against both endpoints and print which succeeds, so this
- * question is settled live rather than trusted from a single report.
+ * Canvas Status is its own service (not a sub-path of Canvas Service) with
+ * its own body shape per endpoint - see AGENTS.md Part 1 step 6. id_token
+ * is the confirmed-working token for both; access_token 401s and is not
+ * probed here any more (that question was open when this function first
+ * compared both, and is now settled).
  */
-async function probeStatusAndMetrics(baseUrl, tenant, idToken, accessToken, canvasIds) {
-  const endpoints = [
-    { name: 'Canvas Status /status/fetch_all', path: '/canvas-service/status/fetch_all' },
-    { name: 'Metrics /metrics/fetch_all', path: '/canvas-service/metrics/fetch_all' },
-  ]
+async function probeStatusAndMetrics(baseUrl, tenant, idToken, players) {
   const results = []
-  for (const endpoint of endpoints) {
-    for (const [tokenName, token] of [['id_token', idToken], ['access_token', accessToken]]) {
-      const res = await fetch(`${baseUrl}${endpoint.path}`, {
-        method: 'POST',
-        headers: authHeaders(tenant, token),
-        body: JSON.stringify({ ids: canvasIds.slice(0, 5) }),
-      })
-      results.push({ endpoint: endpoint.name, token: tokenName, status: res.status, ok: res.ok })
-    }
-  }
+
+  const statusRes = await fetch(`${baseUrl}/canvas-status/status/fetch_all`, {
+    method: 'POST',
+    headers: authHeaders(tenant, idToken),
+    body: JSON.stringify({ players: players.slice(0, 5).map((p) => ({ device_id: p.deviceId, device_jid: p.deviceJid })) }),
+  })
+  results.push({ endpoint: 'Canvas Status /status/fetch_all', token: 'id_token', status: statusRes.status, ok: statusRes.ok })
+
+  const metricsRes = await fetch(`${baseUrl}/canvas-status/metrics/fetch_all`, {
+    method: 'POST',
+    headers: authHeaders(tenant, idToken),
+    body: JSON.stringify(players.slice(0, 5).map((p) => p.deviceId)),
+  })
+  results.push({ endpoint: 'Metrics /metrics/fetch_all', token: 'id_token', status: metricsRes.status, ok: metricsRes.ok })
+
   return results
 }
 
@@ -241,9 +243,11 @@ async function main() {
     console.log('\n(pass a canvas ID as the first argument to probe its settings, e.g. `node probe/videri-probe.mjs 12345`)')
   }
 
-  console.log('\n== 6. Canvas Status / Metrics: id_token vs access_token ==')
-  const canvasIds = canvases.map((c) => c.id).filter(Boolean)
-  const statusResults = await probeStatusAndMetrics(baseUrl, tenant, tokenResponse.id_token, tokenResponse.access_token, canvasIds)
+  console.log('\n== 6. Canvas Status / Metrics ==')
+  const players = canvases
+    .map((c) => ({ deviceId: c.device_id ?? c.deviceId, deviceJid: c.xmpp_jid ?? c.xmppJid }))
+    .filter((p) => p.deviceId)
+  const statusResults = await probeStatusAndMetrics(baseUrl, tenant, tokenResponse.id_token, players)
   for (const result of statusResults) {
     console.log(`${result.endpoint} + ${result.token}: ${result.status} ${result.ok ? 'OK' : 'FAIL'}`)
   }
