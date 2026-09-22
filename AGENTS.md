@@ -380,6 +380,17 @@ brightness-level field exists on this endpoint.
   string (`"Hamza Workspaces"`), the single-item endpoint returns
   `{uuid, displayName}`. Not documented anywhere else; check the type
   before rendering. Assets and projects don't have this inconsistency.
+- **Displaying an existing asset or playlist (a thumbnail, a preview) uses
+  `blobs[]`, not `meta`.** `meta` (on both list items and single-item
+  fetches) is upload/ingestion metadata — bucket, format, checksums, and
+  a `presigned_url` that points at the *original* uploaded file and
+  expires in 15 minutes (`X-Amz-Expires=900`), meant for the upload flow
+  above, not for holding onto or rendering in a UI. The renderable images
+  are `blobs[]`, an array of `{name, url, width, height, type, ...}`,
+  where `name` is `"thumbnail"`, `"landscape-hd"`, `"original"`, etc. and
+  `url` is a stable, public `cdn.<env>.videri.com` URL safe to use
+  directly as an `<img src>`. Verified live: an asset's `blobs` reliably
+  includes a `"thumbnail"` entry — prefer that one for list/grid views.
 
 ### Publisher adapter (`lib/services/publisher.mjs`)
 
