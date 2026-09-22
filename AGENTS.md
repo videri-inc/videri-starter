@@ -12,9 +12,11 @@ environment, never invent identifiers, count from totals, no secrets
 anywhere visible). This file covers what this repo's own code does.
 
 Status: v0. Covers `videri-probe` (CORE-10294) and the core client library —
-auth, request wrapper, Canvas Service, CMS and Publisher adapters, config
-(CORE-10267). Does not yet cover wall/layout resolution, delivery evidence,
-or the menu-board recipe (CORE-10268, lives in `videri-recipes`).
+auth, request wrapper, RPM (workspaces), Canvas Service, Canvas Status, CMS
+and Publisher adapters, config (CORE-10267). Does not yet cover wall/layout
+resolution, delivery evidence, canvas settings (Part 1 step 4's documented
+endpoint doesn't work — no replacement found), or the menu-board recipe
+(CORE-10268, lives in `videri-recipes`).
 
 ## Part 1: `videri-probe`
 
@@ -90,6 +92,14 @@ Response shape (`UserGroupAccessResponseDto`):
   `uuid` and `displayName`, so a builder can see the full tree in one pass.
 - `x-tenant` takes **exactly one** tenant code, never the whole `tenants`
   array. For a multi-tenant account, call once per tenant.
+- **This endpoint does not appear in the published `/rpm/api-json` spec**
+  (verified live) — that spec only documents a separate `/v1/...` surface.
+  This contradicts the platform-wide rule to read a service's spec before
+  calling it; for this one endpoint, this document is the only source of
+  truth. Don't conclude from an incomplete spec that the endpoint doesn't
+  exist.
+
+Reference implementation: `lib/services/rpm.mjs` (`listWorkspaces`).
 
 ### 3. List canvases
 
@@ -133,6 +143,15 @@ Content-Type: application/json
 
 - Print the full response, with the `available_timezones` field removed
   (it is large and not useful for this discovery pass).
+- **Verified live against sandbox: this 404s, on both online and offline
+  canvases.** `sync_command` does not appear anywhere in the live
+  `canvas-service` OpenAPI spec. The closest match,
+  `GET/POST /canvas/v1/players/settings/{deviceId}`, is explicitly
+  documented as device-facing — it requires device authentication, not an
+  operator `id_token`, and returns 401/403 for a normal API caller. No
+  working operator-facing replacement has been found as of this writing.
+  Treat this step as broken on this deployment rather than debugging your
+  own request — the failure is the documented endpoint, not your call.
 
 ### 5. Optional write: flip brightness (`--write` flag)
 
@@ -155,30 +174,45 @@ Content-Type: application/json
   `brightness before=<X> after=<Y>` so the effect is visible, not assumed
   from a 200 response.
 
-### 6. Canvas Status and Metrics: `id_token` vs `access_token`
+### 6. Canvas Status and Metrics
 
-Every other call in this document uses `id_token`. Canvas Status and
-Metrics are the one documented exception — one internal build reports both
-endpoints need `access_token` instead, returning 401/403 to `id_token`
-where every other service accepts it. This has not been independently
-reproduced by a curator as of this file's writing.
+Verified live against sandbox (previous revisions of this file had this
+wrong in three ways — corrected below):
 
-Probe both endpoints with both token types and print the result, so this
-question is settled live against the environment you're actually running
-against, not trusted from a document:
+1. **Canvas Status is its own service, not a sub-path of Canvas Service.**
+   `openapi/index.json` lists it separately as `canvas-status`, server
+   prefix `/canvas-status`. `/canvas-service/status/fetch_all` 404s; the
+   real path is `/canvas-status/status/fetch_all` (and
+   `/canvas-status/metrics/fetch_all`).
+2. **The request body differs per endpoint, and neither is `{ids: [...]}`:**
+   - `/status/fetch_all` wants `{"players": [{"device_id": "...", "device_jid": "..."}]}`
+   - `/metrics/fetch_all` wants a bare array of device ID strings: `["dev1", "dev2"]`
+3. **`id_token` works, `access_token` does not** — the opposite of what an
+   earlier revision of this file speculated. With the corrected path and
+   body, `id_token` returns 200; `access_token` returns 401 ("jwt signature
+   verification failed: 'vle_user_id' claim is required"). Use `id_token`,
+   same as every other service in this document.
 
 ```
-POST {API_BASE_URL}/canvas-service/status/fetch_all
-POST {API_BASE_URL}/canvas-service/metrics/fetch_all
-Authorization: Bearer <id_token OR access_token>
+POST {API_BASE_URL}/canvas-status/status/fetch_all
+Authorization: Bearer <id_token>
 x-tenant: <tenant_code>
 Content-Type: application/json
 
-{ "ids": [<up to 5 canvas ids from step 3>] }
+{ "players": [ { "device_id": "...", "device_jid": "..." } ] }
 ```
 
-Print one line per (endpoint, token type) combination: the endpoint name,
-which token was used, the HTTP status, and OK/FAIL. Four lines total.
+```
+POST {API_BASE_URL}/canvas-status/metrics/fetch_all
+Authorization: Bearer <id_token>
+x-tenant: <tenant_code>
+Content-Type: application/json
+
+[ "device_id_1", "device_id_2" ]
+```
+
+Reference implementation: `lib/services/canvas-status.mjs`
+(`fetchStatus`, `fetchMetrics`).
 
 ## Headers, summarized
 
@@ -276,6 +310,22 @@ calls instead of raw `fetch`:
 - On a 401 specifically, also calls `invalidateToken` before throwing, so
   the *next* call re-authenticates automatically.
 
+### RPM adapter (`lib/services/rpm.mjs`)
+
+`listWorkspaces(credentials)` — `GET /rpm-service/v2/users/me/access/groups`,
+flattened from the returned tree into a depth-annotated array (`{depth,
+id, name, parentId}`). See Part 1 step 2 for the endpoint contract, the
+`descendants`-not-`children` gotcha, and the note that this endpoint is
+missing from the published `/rpm/api-json` spec.
+
+### Canvas Status adapter (`lib/services/canvas-status.mjs`)
+
+`fetchStatus(credentials, players)` / `fetchMetrics(credentials,
+deviceIds)` — see Part 1 step 6 for the verified path, body shapes, and
+token type. Not in the original CORE-10267 scope; added once a fleet
+dashboard built on this starter kit needed live device health instead of
+just static canvas listings.
+
 ### Canvas Service adapter (`lib/services/canvas.mjs`)
 
 `listCanvases(credentials, {groupId?})` — see Part 1 step 3 for the
@@ -293,8 +343,16 @@ brightness-level field exists on this endpoint.
 
 - `createAsset(credentials, groupId, {file, name, orientation?, tagUuids?})`
   — `POST /cms/api/v1/assets`. Both `x-tenant` and `x-group` are required.
-  `file` is a base64-encoded string or an S3 object key, not a multipart
-  upload.
+  **`file` is NOT inline base64**, despite the live spec's own field
+  description implying it accepts one — every base64 payload tested (70
+  bytes to ~10KB, PNG and JPEG, including a known-good 1x1 PNG) was
+  rejected with `400 "<payload> has unsupported format"`. The real flow is
+  two steps: pass `file` as a plain filename-like string (used only to
+  derive the extension); the response's `meta.presigned_url` is then where
+  you `PUT` the actual bytes, as a separate request to that URL (a
+  different host — this is the one place a raw `fetch`, not
+  `lib/client.mjs`'s `request()`, is correct, since a presigned S3 URL
+  takes no Videri auth headers).
 - `createPlaylist(credentials, groupId, {name, tagUuids?, projectUuid?})`
   — `POST /cms/api/v1/playlists`, returns `{uuid, ...}`.
 - `updatePlaylistAssets(credentials, playlistId, assets)` — `PATCH
@@ -311,6 +369,17 @@ brightness-level field exists on this endpoint.
   The **v2** equivalents (`/api/v2/assets/pagination` etc.) use a
   different, flatter `{total, page, limit}` shape with no `data`/`meta`
   wrapper — don't mix v1 and v2 pagination assumptions in the same client.
+- `listProjects(credentials, {page?, limit?, groupId?, search?})` — `GET
+  /cms/api/v1/projects`, same v1 `{data, meta}` shape as assets/playlists.
+  Each item carries `assetCount`/`playlistCount` already aggregated by the
+  API — no client-side counting needed for project-level metrics.
+- `getProject(credentials, uuid)` / `getAsset(credentials, uuid)` /
+  `getPlaylist(credentials, playlistId)` — single-item fetches, for
+  drill-down views. **`getPlaylist`'s `group` field is shaped differently
+  than `listPlaylists`' item shape**: the list endpoint returns a plain
+  string (`"Hamza Workspaces"`), the single-item endpoint returns
+  `{uuid, displayName}`. Not documented anywhere else; check the type
+  before rendering. Assets and projects don't have this inconsistency.
 
 ### Publisher adapter (`lib/services/publisher.mjs`)
 
@@ -365,11 +434,14 @@ brightness-level field exists on this endpoint.
 
 ### What's not in the client library yet
 
-Not implemented, out of scope for CORE-10267: wall/layout resolution (only
-needed for multi-screen recipes), delivery-evidence and proof-of-play
-polling, a persistent or distributed token cache (the in-memory cache is
-sufficient for a script or short-lived process; a long-running server's
-caching strategy is that app's own concern). The menu-board recipe
-(CORE-10268, `videri-recipes`) is expected to need at least wall/layout
-resolution and delivery evidence — build those there, informed by what the
-recipe actually needs, rather than speculatively here.
+Not implemented, out of scope for CORE-10267/this revision: wall/layout
+resolution (only needed for multi-screen recipes), delivery-evidence and
+proof-of-play polling, a persistent or distributed token cache (the
+in-memory cache is sufficient for a script or short-lived process; a
+long-running server's caching strategy is that app's own concern), and a
+working operator-facing replacement for canvas settings (Part 1 step 4 —
+the documented endpoint 404s and no alternative has been found). The
+menu-board recipe (CORE-10268, `videri-recipes`) is expected to need at
+least wall/layout resolution and delivery evidence — build those there,
+informed by what the recipe actually needs, rather than speculatively
+here.
