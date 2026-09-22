@@ -89,21 +89,21 @@ function authHeaders(tenant, token) {
 /** Walks the workspace tree under `descendants` (not `children` - the published schema names it wrong; see GOTCHAS.md). */
 function flattenWorkspaces(nodes, depth = 0, out = []) {
   for (const node of nodes ?? []) {
-    out.push({ depth, id: node.id ?? node.groupId, name: node.name ?? node.groupName })
+    out.push({ depth, id: node.uuid, name: node.displayName })
     flattenWorkspaces(node.descendants ?? node.children ?? [], depth + 1, out)
   }
   return out
 }
 
 async function listWorkspaces(baseUrl, tenant, idToken) {
-  const res = await fetch(`${baseUrl}/rpm/v1/users/me/groups_access`, {
+  const res = await fetch(`${baseUrl}/rpm-service/v2/users/me/access/groups`, {
     headers: authHeaders(tenant, idToken),
   })
   if (!res.ok) {
     throw new Error(`Workspace listing failed: ${res.status} ${await res.text()}`)
   }
   const body = await res.json()
-  return flattenWorkspaces(body.groupAccess ?? [])
+  return flattenWorkspaces(body.groups ?? [])
 }
 
 /** assigned_to_group=true and =false are disjoint sets with no "all" value - call both and merge. */
@@ -210,8 +210,8 @@ async function main() {
     const deviceId = canvas.device_id ?? canvas.deviceId
     const xmppJid = canvas.xmpp_jid ?? canvas.xmppJid
     const name = canvas.name
-    const brightness = canvas.current_brightness ?? canvas.currentBrightness
-    console.log(`- id=${id} device_id=${deviceId} xmpp_jid=${xmppJid} name=${JSON.stringify(name)} current_brightness=${brightness}`)
+    const presenceStatus = canvas.presence_status ?? canvas.presenceStatus
+    console.log(`- id=${id} device_id=${deviceId} xmpp_jid=${xmppJid} name=${JSON.stringify(name)} presence_status=${presenceStatus}`)
   }
   console.log(`${canvases.length} canvases total`)
 
@@ -226,6 +226,10 @@ async function main() {
         console.error(`Refusing --write: VIDERI_TENANT=${tenant} is not an internal builder tenant (Videri or Videri Sales).`)
         process.exit(1)
       }
+      // ops_get_settings is a device-command response, not a documented REST
+      // resource - its field name for the current level is unverified
+      // against a live response. Print the whole settings object above so a
+      // reader can see the real field name and adjust this if it differs.
       const before = settings.brightness ?? settings.current_brightness
       const target = before >= 128 ? 64 : 200
       console.log(`Current brightness: ${before}. Setting to ${target}...`)

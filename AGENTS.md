@@ -56,24 +56,29 @@ Response, `200 OK`:
 ### 2. List workspaces (per tenant)
 
 ```
-GET {API_BASE_URL}/rpm/v1/users/me/groups_access
+GET {API_BASE_URL}/rpm-service/v2/users/me/access/groups
 Authorization: Bearer <id_token>
 x-tenant: <tenant_code>
 ```
 
-Response shape:
+`me` is literal — the RPM spec accepts either a user UUID or the string
+`me` for the caller's own access. There is also a deprecated
+`GET /v2/users/{userId}/access` that returns a different,
+permissions-oriented shape — use `.../access/groups`, not that one.
+
+Response shape (`UserGroupAccessResponseDto`):
 
 ```json
-{ "groupAccess": [ { "id": "...", "name": "...", "descendants": [ ... ] } ] }
+{ "groups": [ { "uuid": "...", "displayName": "...", "groupVector": "...", "parentUuid": null, "descendants": [ ... ] } ] }
 ```
 
 - The nested workspace field is **`descendants`**, not `children` — the
-  published OpenAPI schema names it `children`, so code generated from the
-  spec reads the wrong key and silently sees a flat, one-level tree. Read
-  `descendants`; fall back to `children` only defensively
-  (`node.descendants ?? node.children ?? []`).
-- Walk the tree recursively and print every workspace with its depth and
-  id, so a builder can see the full tree in one pass.
+  published OpenAPI schema names it `children` on some generated clients,
+  so code generated from the spec reads the wrong key and silently sees a
+  flat, one-level tree. Read `descendants`; fall back to `children` only
+  defensively (`node.descendants ?? node.children ?? []`).
+- Walk the tree recursively and print every workspace with its depth,
+  `uuid` and `displayName`, so a builder can see the full tree in one pass.
 - `x-tenant` takes **exactly one** tenant code, never the whole `tenants`
   array. For a multi-tenant account, call once per tenant.
 
@@ -88,12 +93,16 @@ x-tenant: <tenant_code>
 
 - `assigned_to_group=true` and `=false` return **disjoint sets** — there is
   no "all" value. Call both and concatenate to get every canvas.
-- Response body may put the array under `content`, `data`, `canvases`, or
-  `items` depending on the deploy — check all four keys in that order and
-  use whichever is present. Do not assume one wrapper.
+- The live spec wraps the array under `content` (`PageResponseCanvas`,
+  standard Spring Page shape) — but a response body may put it under
+  `content`, `data`, `canvases`, or `items` depending on the deploy; check
+  all four keys in that order and use whichever is present rather than
+  assuming one wrapper.
 - For each canvas, print (accepting both snake_case and camelCase):
   `id`, `device_id`/`deviceId`, `xmpp_jid`/`xmppJid`, `name`,
-  `current_brightness`/`currentBrightness`.
+  `presence_status`/`presenceStatus`. There is no brightness-level field on
+  this endpoint — `current_brightness`/`currentBrightness` does not exist
+  on the verified live schema; do not print it.
 - Print the total count at the end. Count from the merged array's length
   here (this is a one-shot discovery script over a bounded demo estate);
   a real client should count from a service's own total field
