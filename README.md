@@ -5,9 +5,10 @@ starts here instead of from an empty folder.
 
 **Status: internal preview.** `probe/videri-probe.mjs` (CORE-10294) and the
 core client library in `lib/` (CORE-10267) are both here — auth, a typed
-request wrapper, Canvas Service/CMS/Publisher adapters, config, and one
-live render example. The menu-board recipe built on top of this lives in
-[videri-recipes](https://github.com/videri-inc/videri-recipes), not here.
+request wrapper, RPM/Canvas Service/Canvas Status/CMS/Publisher adapters,
+config, and one live render example. The menu-board recipe built on top of
+this lives in [videri-recipes](https://github.com/videri-inc/videri-recipes),
+not here.
 
 ## Get set up
 
