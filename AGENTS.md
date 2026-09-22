@@ -175,7 +175,7 @@ which token was used, the HTTP status, and OK/FAIL. Four lines total.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `VIDERI_API_BASE_URL` | no | `https://api.go.videri.com` | no trailing slash; production is the public default, sandbox (`api.sandbox.videri.com`) is internal-builder/partner-preview only (`videri-context/AUTH.md`) |
+| `VIDERI_API_BASE_URL` | no | `https://api.go.videri.com` | no trailing slash; a key, a token and a tenant all belong to exactly one environment, so change this if you're building against a different one |
 | `VIDERI_USERNAME` | yes | — | |
 | `VIDERI_PASSWORD` | yes | — | |
 | `VIDERI_API_KEY` | yes | — | never printed |
@@ -198,9 +198,7 @@ port.
 1. Never print `VIDERI_API_KEY`, `VIDERI_PASSWORD`, or a full token value.
 2. Refuse `--write` unless the tenant is Videri or Videri Sales.
 3. Default to production (`https://api.go.videri.com`) if `VIDERI_API_BASE_URL`
-   is unset — it's the environment any public end user can reach. Sandbox is
-   internal-builder/partner-preview only; use it by setting the var
-   explicitly, not as a default.
+   is unset.
 4. Fail loudly (non-zero exit, clear message) on any unexpected response
    shape rather than guessing — this script's job is to surface exactly
    what the platform returns, not to paper over it.

@@ -6,8 +6,8 @@
  * write command.
  *
  * Run before any framework code. It compresses the discovery every new
- * builder repeats by hand into a ten-minute, end-to-end sandbox check, and
- * it settles the id_token vs access_token question for Canvas Status and
+ * builder repeats by hand into a ten-minute, end-to-end check, and it
+ * settles the id_token vs access_token question for Canvas Status and
  * Metrics live rather than by reading conflicting notes.
  *
  * This file is the Node reference implementation of the protocol documented
@@ -24,8 +24,7 @@
  *   internal builder tenants) - see AUTH.md "Getting access".
  *
  * Env vars (see .env.example):
- *   VIDERI_API_BASE_URL  default https://api.go.videri.com (production; sandbox
- *                        is internal-builder/partner-preview only, set explicitly)
+ *   VIDERI_API_BASE_URL  default https://api.go.videri.com
  *   VIDERI_USERNAME      required
  *   VIDERI_PASSWORD      required
  *   VIDERI_API_KEY       required, never printed
