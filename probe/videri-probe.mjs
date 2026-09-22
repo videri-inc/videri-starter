@@ -219,25 +219,40 @@ async function main() {
 
   if (canvasId) {
     console.log(`\n== 4. Settings for canvas ${canvasId} ==`)
-    const settings = await getCanvasSettings(baseUrl, tenant, tokenResponse.id_token, canvasId)
-    console.log(JSON.stringify(settings, null, 2))
+    // Verified broken on this deployment (AGENTS.md Part 1 step 4): the
+    // documented sync_command/ops_get_settings call 404s on every canvas,
+    // online or offline. Catch it here rather than letting it abort the
+    // whole script - steps 5 and 6 don't depend on this one succeeding, and
+    // a first-time reader running this exactly as the README shows
+    // (`node probe/videri-probe.mjs <canvasId>`) should still see the rest
+    // of the probe run rather than an unhandled-looking crash.
+    let settings = null
+    try {
+      settings = await getCanvasSettings(baseUrl, tenant, tokenResponse.id_token, canvasId)
+      console.log(JSON.stringify(settings, null, 2))
+    } catch (error) {
+      console.log(`FAIL (expected on this deployment - see AGENTS.md Part 1 step 4): ${error.message}`)
+    }
 
     if (write) {
       console.log(`\n== 5. --write: flip brightness on canvas ${canvasId} ==`)
-      if (!INTERNAL_BUILDER_TENANTS.has(tenant.toUpperCase())) {
+      if (!settings) {
+        console.error('Skipping --write: step 4 did not return current settings to diff against.')
+      } else if (!INTERNAL_BUILDER_TENANTS.has(tenant.toUpperCase())) {
         console.error(`Refusing --write: VIDERI_TENANT=${tenant} is not an internal builder tenant (Videri or Videri Sales).`)
-        process.exit(1)
+      } else {
+        // ops_get_settings is a device-command response, not a documented
+        // REST resource - its field name for the current level is unverified
+        // against a live response. Print the whole settings object above so
+        // a reader can see the real field name and adjust this if it
+        // differs.
+        const before = settings.brightness ?? settings.current_brightness
+        const target = before >= 128 ? 64 : 200
+        console.log(`Current brightness: ${before}. Setting to ${target}...`)
+        await sendBrightnessCommand(baseUrl, tenant, tokenResponse.id_token, canvasId, target)
+        const after = await getCanvasSettings(baseUrl, tenant, tokenResponse.id_token, canvasId)
+        console.log(`brightness before=${before} after=${after.brightness ?? after.current_brightness}`)
       }
-      // ops_get_settings is a device-command response, not a documented REST
-      // resource - its field name for the current level is unverified
-      // against a live response. Print the whole settings object above so a
-      // reader can see the real field name and adjust this if it differs.
-      const before = settings.brightness ?? settings.current_brightness
-      const target = before >= 128 ? 64 : 200
-      console.log(`Current brightness: ${before}. Setting to ${target}...`)
-      await sendBrightnessCommand(baseUrl, tenant, tokenResponse.id_token, canvasId, target)
-      const after = await getCanvasSettings(baseUrl, tenant, tokenResponse.id_token, canvasId)
-      console.log(`brightness before=${before} after=${after.brightness ?? after.current_brightness}`)
     }
   } else {
     console.log('\n(pass a canvas ID as the first argument to probe its settings, e.g. `node probe/videri-probe.mjs 12345`)')
