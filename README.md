@@ -16,7 +16,11 @@ cp .env.example .env   # fill in your credentials, see AUTH.md in videri-context
 ```
 
 `VIDERI_API_BASE_URL` selects the environment (defaults to production) —
-change it to whichever one your key, token and tenant belong to.
+change it to whichever one your key, token and tenant belong to. That
+environment's own docs and `/llms.txt` live at a matching `developer.*`
+URL, not necessarily the one you started from — see `portalUrlFor` in
+[AGENTS.md](AGENTS.md) if you're deriving it from code instead of
+following a link you were given.
 
 ## Run the probe
 

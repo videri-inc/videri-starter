@@ -195,7 +195,7 @@ Applies to both the probe and the client library.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `VIDERI_API_BASE_URL` | no | `https://api.go.videri.com` | no trailing slash; a key, a token and a tenant all belong to exactly one environment, so change this if you're building against a different one |
+| `VIDERI_API_BASE_URL` | no | `https://api.go.videri.com` | no trailing slash; a key, a token and a tenant all belong to exactly one environment, so change this if you're building against a different one. That environment's docs/`llms.txt` live at a URL derived from this one — see `portalUrlFor` under Config, below |
 | `VIDERI_USERNAME` | yes | — | |
 | `VIDERI_PASSWORD` | yes | — | |
 | `VIDERI_API_KEY` | yes | — | never printed |
@@ -343,10 +343,25 @@ brightness-level field exists on this endpoint.
   `VIDERI_TENANT` (all required), `VIDERI_GROUP` (optional). Throws naming
   every missing variable, so a misconfigured environment fails at startup
   with a clear message rather than as a confusing 401 deep in a request.
+  The returned config also carries `portalUrl`, derived from
+  `apiBaseUrl` — see below.
 - `isLiveConfigured(env?)` — `true` when every required variable is
   present. Every reference build in this ecosystem independently
   reinvented some version of this "do we have real credentials" gate; use
   this one instead of writing another.
+- `portalUrlFor(apiBaseUrl)` — derives the developer portal URL (where
+  that environment's `/llms.txt`, `/openapi/index.json` and knowledge base
+  live) from an API base URL. A key, a token and a tenant all belong to
+  exactly one environment, and so does its documentation — every stack
+  follows `api.<stack>` → `developer.<stack>`, e.g.
+  `api.sandbox.videri.com` → `developer.sandbox.videri.com`, with one
+  exception: production's portal doesn't carry the stack's own label
+  (`api.go.videri.com` → `developer.videri.com`, not
+  `developer.go.videri.com`, which has no DNS record). A port should
+  implement this same derivation rather than hardcoding one portal host —
+  if you're an agent following a prompt that named one `VIDERI_API_BASE_URL`,
+  don't assume its docs live at `developer.videri.com` unless that base URL
+  is production's.
 
 ### What's not in the client library yet
 
