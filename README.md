@@ -3,10 +3,32 @@
 The canonical starter kit for building on the Videri REST API. Every new build
 starts here instead of from an empty folder.
 
-**Status: internal preview, no code yet.** The kit is a strip-down of the
-strongest existing internal build, nominated in harvest session 1
-(CORE-10259); the stack is decided there so that this is a strip-down rather
-than a port. Code lands under CORE-10267.
+**Status: internal preview.** `probe/videri-probe.mjs` (CORE-10294) is the
+first thing to land — a one-file, dependency-free discovery script, meant to
+run before any framework code. The rest of the kit (auth module, API client,
+config, one live render) is CORE-10267, not yet started.
+
+## Run the probe
+
+The probe authenticates, lists your tenants and workspaces, lists canvases,
+and dumps one device's settings. It settles more in ten minutes than reading
+documentation does — run it first, before anything else in this repo.
+
+```sh
+cp .env.example .env   # fill in your credentials, see AUTH.md in videri-context
+node --env-file=.env probe/videri-probe.mjs <canvasId>
+```
+
+Add `--write` to also flip that canvas's brightness and confirm the change
+took effect. Refused unless your tenant is Videri or Videri Sales.
+
+**Not using Node?** The probe ships in Node because that's what the
+reference builds in this ecosystem use, but the protocol it implements is
+language-neutral. Read [AGENTS.md](AGENTS.md) for the full spec — request
+shapes, headers, decode steps, expected output — and ask your coding agent
+to port it to whatever language you're already using. `AGENTS.md` is the
+contract; `probe/videri-probe.mjs` is a working example to verify a port
+against (run both against the same sandbox tenant and diff the output).
 
 ## What the kit will contain
 
