@@ -24,7 +24,8 @@
  *   internal builder tenants) - see AUTH.md "Getting access".
  *
  * Env vars (see .env.example):
- *   VIDERI_API_BASE_URL  default https://api.sandbox.videri.com
+ *   VIDERI_API_BASE_URL  default https://api.go.videri.com (production; sandbox
+ *                        is internal-builder/partner-preview only, set explicitly)
  *   VIDERI_USERNAME      required
  *   VIDERI_PASSWORD      required
  *   VIDERI_API_KEY       required, never printed
@@ -179,7 +180,7 @@ async function main() {
   const write = args.includes('--write')
   const canvasId = args.find((arg) => !arg.startsWith('--'))
 
-  const baseUrl = (process.env.VIDERI_API_BASE_URL ?? 'https://api.sandbox.videri.com').replace(/\/+$/, '')
+  const baseUrl = (process.env.VIDERI_API_BASE_URL ?? 'https://api.go.videri.com').replace(/\/+$/, '')
   const username = requireEnv('VIDERI_USERNAME')
   const password = requireEnv('VIDERI_PASSWORD')
   const apiKey = requireEnv('VIDERI_API_KEY')

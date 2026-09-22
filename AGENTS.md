@@ -175,7 +175,7 @@ which token was used, the HTTP status, and OK/FAIL. Four lines total.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `VIDERI_API_BASE_URL` | no | `https://api.sandbox.videri.com` | no trailing slash |
+| `VIDERI_API_BASE_URL` | no | `https://api.go.videri.com` | no trailing slash; production is the public default, sandbox (`api.sandbox.videri.com`) is internal-builder/partner-preview only (`videri-context/AUTH.md`) |
 | `VIDERI_USERNAME` | yes | — | |
 | `VIDERI_PASSWORD` | yes | — | |
 | `VIDERI_API_KEY` | yes | — | never printed |
@@ -188,7 +188,8 @@ reference, even if formatting differs — six numbered sections in this
 order: Authenticate, Workspaces, Canvases, Canvas settings (if a canvas ID
 was given), the optional write diff (if `--write`), Canvas Status/Metrics
 probe. Run the Node reference (`node probe/videri-probe.mjs <canvasId>`)
-against the same sandbox tenant and diff the two outputs to verify a port.
+against the same tenant and environment and diff the two outputs to verify a
+port.
 
 ## Non-negotiable rules for this probe specifically
 
@@ -196,7 +197,10 @@ against the same sandbox tenant and diff the two outputs to verify a port.
 
 1. Never print `VIDERI_API_KEY`, `VIDERI_PASSWORD`, or a full token value.
 2. Refuse `--write` unless the tenant is Videri or Videri Sales.
-3. Default to the sandbox environment if `VIDERI_API_BASE_URL` is unset.
+3. Default to production (`https://api.go.videri.com`) if `VIDERI_API_BASE_URL`
+   is unset — it's the environment any public end user can reach. Sandbox is
+   internal-builder/partner-preview only; use it by setting the var
+   explicitly, not as a default.
 4. Fail loudly (non-zero exit, clear message) on any unexpected response
    shape rather than guessing — this script's job is to surface exactly
    what the platform returns, not to paper over it.
