@@ -3,11 +3,11 @@
 The canonical starter kit for building on the Videri REST API. Every new build
 starts here instead of from an empty folder.
 
-**Status: internal preview.** `probe/videri-probe.mjs` (CORE-10294) and the
-core client library in `lib/` (CORE-10267) are both here — auth, a typed
-request wrapper, RPM/Canvas Service/Canvas Status/CMS/Publisher adapters,
-config, and one live render example. The menu-board recipe built on top of
-this lives in [videri-recipes](https://github.com/videri-inc/videri-recipes),
+**Status: public preview.** Licensed under Apache-2.0. `probe/videri-probe.mjs`
+(CORE-10294) and the core client library in `lib/` (CORE-10267) are both here:
+auth, a typed request wrapper, RPM/Canvas Service/Canvas Status/CMS/Publisher
+adapters, config, and one live render example. The menu-board recipe built on
+top of this lives in [videri-recipes](https://github.com/videri-inc/videri-recipes),
 not here.
 
 ## Get set up
